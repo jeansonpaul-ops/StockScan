@@ -1075,7 +1075,11 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);dis
     <!-- Format -->
     <label class="form-label">Format d'étiquette</label>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;" id="label-format-grid">
-      <button class="label-fmt-btn active" data-w="62" data-h="29" onclick="selectLabelFormat(this)">
+      <button class="label-fmt-btn active" data-w="89" data-h="36" onclick="selectLabelFormat(this)" style="grid-column:1/-1;border-color:var(--blue);background:#EBF8FF;">
+        <div style="font-weight:800;font-size:13px;color:var(--blue);">89 × 36 mm ⭐</div>
+        <div style="font-size:10px;color:var(--blue);opacity:.7;">Format paysage LuxVisual</div>
+      </button>
+      <button class="label-fmt-btn" data-w="62" data-h="29" onclick="selectLabelFormat(this)">
         <div style="font-weight:700;font-size:13px;">62 × 29 mm</div>
         <div style="font-size:10px;color:var(--muted);">Brother QL standard</div>
       </button>
@@ -2666,8 +2670,8 @@ prepareForm();
 // ═══════════════════════════════════════════════════════════════════════════
 let labelProducts = [];
 let labelCopies   = 1;
-let labelFmtW     = 62;
-let labelFmtH     = 29;
+let labelFmtW     = 89;
+let labelFmtH     = 36;
 
 function openLabelModal(prods) {
   labelProducts = prods || [];
@@ -2706,13 +2710,56 @@ function getLabelOptions() {
   };
 }
 
+function isLuxVisualFormat() {
+  return labelFmtW === 89 && labelFmtH === 36;
+}
+
 function updateLabelPreview() {
   const prev = document.getElementById('label-preview');
   if(!prev || labelProducts.length === 0) return;
   const p = labelProducts[0];
   const opts = getLabelOptions();
 
-  // Scale preview to fit the container (max 280px wide)
+  if(isLuxVisualFormat()) {
+    // ── Gabarit LuxVisual 89×36 mm ──
+    const scale = Math.min(280 / 89, 100 / 36);
+    const pw = Math.round(89 * scale);
+    const ph = Math.round(36 * scale);
+    const qrS = ph - 4;
+    const stripeW = Math.round(pw * 0.055);
+    const qrZoneW = opts.qr ? qrS + 4 : 0;
+    const textW = pw - stripeW - qrZoneW - 8;
+
+    const brand = p.nom ? p.nom.split(' ')[0] : '';
+    const nomSans = p.nom ? p.nom.replace(brand, '').trim() : '';
+
+    prev.innerHTML = `
+      <div style="width:${pw}px;height:${ph}px;border-radius:5px;overflow:hidden;display:flex;box-shadow:0 2px 8px rgba(0,0,0,.15);box-sizing:border-box;font-family:Arial,sans-serif;">
+        <div style="width:${stripeW}px;background:#1a1a1a;flex-shrink:0;"></div>
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:3px 4px 3px 5px;min-width:0;gap:1px;background:#fff;">
+          ${opts.nom && brand ? `<div style="font-size:${Math.round(ph/7)}px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:1px;line-height:1;">${brand}</div>` : ''}
+          ${opts.nom && nomSans ? `<div style="font-size:${Math.round(ph/4)}px;font-weight:900;color:#111;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:${textW}px;">${nomSans}</div>` : ''}
+          ${opts.nom && !nomSans && p.nom ? `<div style="font-size:${Math.round(ph/4)}px;font-weight:900;color:#111;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:${textW}px;">${p.nom}</div>` : ''}
+          <div style="width:${Math.round(textW*0.4)}px;height:1.5px;background:#1a1a1a;margin:1px 0;"></div>
+          ${opts.ref && p.reference ? `<div style="display:flex;align-items:center;gap:2px;"><span style="font-size:${Math.round(ph/10)}px;color:#999;font-weight:700;text-transform:uppercase;">Réf.</span><span style="font-family:monospace;font-size:${Math.round(ph/8.5)}px;font-weight:700;color:#222;background:#f0f0f0;padding:0 3px;border-radius:2px;">${p.reference}</span></div>` : ''}
+          ${opts.loc && p.localisation ? `<div style="font-size:${Math.round(ph/9)}px;color:#444;font-weight:700;">📍 ${p.localisation}</div>` : ''}
+        </div>
+        ${opts.qr ? `<div id="prev-qr-wrap" style="width:${qrZoneW}px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:#f7f7f7;border-left:1px solid #e0e0e0;padding:2px;"></div>` : ''}
+      </div>`;
+
+    if(opts.qr) {
+      setTimeout(() => {
+        const qrEl = document.getElementById('prev-qr-wrap');
+        if(qrEl && typeof QRCode !== 'undefined') {
+          qrEl.innerHTML = '';
+          new QRCode(qrEl, { text: p.qr_code || p.reference, width: qrS, height: qrS, colorDark:'#000', colorLight:'#fff' });
+        }
+      }, 30);
+    }
+    return;
+  }
+
+  // ── Gabarit générique ──
   const scale = Math.min(280 / labelFmtW, 90 / labelFmtH);
   const pw = Math.round(labelFmtW * scale);
   const ph = Math.round(labelFmtH * scale);
@@ -2754,7 +2801,6 @@ function printLabels() {
   if(!labelProducts.length) { showToast('Aucun produit à imprimer'); return; }
   const opts = getLabelOptions();
 
-  // Build one label per product × copies, generate QR inline
   const buildLabels = (products, resolve) => {
     let idx = 0;
     const results = [];
@@ -2780,13 +2826,96 @@ function printLabels() {
   };
 
   new Promise(resolve => buildLabels(labelProducts, resolve)).then(items => {
-    const mmToPx = 3.7795; // 1mm = 3.7795px at 96dpi
-    const wPx = Math.round(labelFmtW * mmToPx);
-    const hPx = Math.round(labelFmtH * mmToPx);
-    const isLandscape = labelFmtW > labelFmtH;
-    const qrPx = Math.round(Math.min(hPx - 16, 160));
+    const W = labelFmtW;
+    const H = labelFmtH;
+    const luxVisual = isLuxVisualFormat();
 
     let labelsHTML = '';
+
+    if(luxVisual) {
+      // ── Gabarit LuxVisual 89×36mm ──
+      items.forEach(({ p, qrSrc }) => {
+        for(let c = 0; c < labelCopies; c++) {
+          const brand = p.nom ? p.nom.split(' ')[0] : '';
+          const nomSans = p.nom ? p.nom.replace(brand, '').trim() : '';
+
+          labelsHTML += `
+          <div class="label-box">
+            <div class="lx-stripe"></div>
+            <div class="lx-text">
+              ${opts.nom && brand ? `<div class="lx-brand">${brand}</div>` : ''}
+              ${opts.nom ? `<div class="lx-name">${nomSans || p.nom}</div>` : ''}
+              <div class="lx-divider"></div>
+              <div class="lx-meta">
+                ${opts.ref && p.reference ? `<div class="lx-ref-row"><span class="lx-ref-lbl">Réf.</span><span class="lx-ref-val">${p.reference}</span></div>` : ''}
+                ${opts.loc && p.localisation ? `<div class="lx-loc">📍 ${p.localisation}</div>` : ''}
+              </div>
+            </div>
+            ${opts.qr && qrSrc ? `<div class="lx-qr"><img src="${qrSrc}" class="lx-qr-img"/></div>` : ''}
+          </div>`;
+        }
+      });
+
+      const html = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"/>
+<title>Etiquettes LuxVisual 89×36mm</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  @page { size:${W}mm ${H}mm; margin:0; }
+  body { font-family:Arial,sans-serif; background:#fff; width:${W}mm; }
+  .label-box {
+    width:${W}mm; height:${H}mm;
+    display:flex; align-items:stretch;
+    overflow:hidden; page-break-after:always;
+    background:#fff;
+  }
+  .lx-stripe { width:3mm; background:#1a1a1a; flex-shrink:0; }
+  .lx-text {
+    flex:1; display:flex; flex-direction:column;
+    justify-content:center; padding:2mm 2mm 2mm 3mm; min-width:0; gap:0.5mm;
+  }
+  .lx-brand {
+    font-size:6pt; font-weight:700; color:#555;
+    text-transform:uppercase; letter-spacing:1px; line-height:1;
+  }
+  .lx-name {
+    font-size:14pt; font-weight:900; color:#111;
+    line-height:1.05; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .lx-divider { width:15mm; height:0.5mm; background:#1a1a1a; margin:1mm 0; }
+  .lx-meta { display:flex; flex-direction:column; gap:0.4mm; }
+  .lx-ref-row { display:flex; align-items:center; gap:1mm; }
+  .lx-ref-lbl { font-size:5pt; font-weight:700; color:#999; text-transform:uppercase; letter-spacing:0.5px; }
+  .lx-ref-val { font-family:monospace; font-size:7pt; font-weight:700; color:#222; background:#f0f0f0; padding:0 1mm; border-radius:1mm; }
+  .lx-loc { font-size:5.5pt; font-weight:700; color:#444; }
+  .lx-qr {
+    width:${H}mm; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    background:#f7f7f7; border-left:0.3mm solid #e0e0e0; padding:1mm;
+  }
+  .lx-qr-img { width:${H - 4}mm; height:${H - 4}mm; display:block; }
+  @media print { .label-box { border:none; } }
+</style>
+</head><body>
+${labelsHTML}
+<script>window.onload=function(){ setTimeout(function(){ window.print(); },400); }<\/script>
+</body></html>`;
+
+      const w = window.open('', '_blank');
+      if(!w) { showToast('Autorisez les pop-ups pour imprimer'); return; }
+      w.document.write(html);
+      w.document.close();
+      document.getElementById('label-modal').style.display = 'none';
+      showToast('🖨️ Fenêtre d\'impression ouverte');
+      return;
+    }
+
+    // ── Gabarit générique ──
+    const mmToPx = 3.7795;
+    const wPx = Math.round(W * mmToPx);
+    const hPx = Math.round(H * mmToPx);
+    const qrPx = Math.round(Math.min(hPx - 16, 160));
+
     items.forEach(({ p, qrSrc }) => {
       for(let c = 0; c < labelCopies; c++) {
         let textLines = '';
@@ -2807,59 +2936,21 @@ function printLabels() {
 <title>Etiquettes StockScan</title>
 <style>
   * { box-sizing:border-box; margin:0; padding:0; }
-  @page {
-    size: ${labelFmtW}mm ${labelFmtH}mm;
-    margin: 0;
-  }
-  body {
-    font-family: 'Arial', sans-serif;
-    background: #fff;
-    width: ${labelFmtW}mm;
-  }
+  @page { size: ${W}mm ${H}mm; margin: 0; }
+  body { font-family: 'Arial', sans-serif; background: #fff; width: ${W}mm; }
   .label-box {
-    width: ${labelFmtW}mm;
-    height: ${labelFmtH}mm;
-    display: flex;
-    align-items: center;
-    padding: 2mm 3mm;
-    gap: 2mm;
-    overflow: hidden;
-    page-break-after: always;
+    width: ${W}mm; height: ${H}mm;
+    display: flex; align-items: center;
+    padding: 2mm 3mm; gap: 2mm;
+    overflow: hidden; page-break-after: always;
     border: 0.3mm solid #ddd;
   }
-  .lbl-qr {
-    flex-shrink: 0;
-    display: block;
-  }
-  .lbl-text {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: 1mm;
-  }
-  .lbl-name {
-    font-size: ${Math.max(7, Math.round(labelFmtH / 4.5))}px;
-    font-weight: 800;
-    line-height: 1.2;
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-  }
-  .lbl-ref {
-    font-family: monospace;
-    font-size: ${Math.max(6, Math.round(labelFmtH / 5.5))}px;
-    color: #444;
-  }
-  .lbl-loc {
-    font-size: ${Math.max(6, Math.round(labelFmtH / 6))}px;
-    color: #666;
-  }
-  @media print {
-    .label-box { border: none; }
-  }
+  .lbl-qr { flex-shrink: 0; display: block; }
+  .lbl-text { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 1mm; }
+  .lbl-name { font-size: ${Math.max(7, Math.round(H / 4.5))}px; font-weight: 800; line-height: 1.2; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .lbl-ref { font-family: monospace; font-size: ${Math.max(6, Math.round(H / 5.5))}px; color: #444; }
+  .lbl-loc { font-size: ${Math.max(6, Math.round(H / 6))}px; color: #666; }
+  @media print { .label-box { border: none; } }
 </style>
 </head><body>
 ${labelsHTML}
